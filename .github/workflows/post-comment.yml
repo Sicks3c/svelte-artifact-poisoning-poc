@@ -1,0 +1,112 @@
+name: Post Comment
+
+on:
+  workflow_run:
+    workflows: ['Build Artifact']
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  comment:
+    name: 'Post comment from artifact'
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: output
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Debug artifact
+        run: |
+          echo "=== Downloaded artifact ==="
+          cat output.json
+          echo ""
+          echo "=== Workflow run info ==="
+          echo "Head repo: ${{ github.event.workflow_run.head_repository.full_name }}"
+          echo "Head branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Event: ${{ github.event.workflow_run.event }}"
+
+      - name: Post or update comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const output = JSON.parse(fs.readFileSync('output.json', 'utf8'));
+
+            console.log('Parsed output:', JSON.stringify(output, null, 2));
+
+            const bot_comment_identifier = `<!-- artifact-poc-comment -->`;
+
+            const body = (number) => `${bot_comment_identifier}
+
+            ## Package Published
+
+            | Package | Install Command |
+            |---------|-----------------|
+            ${output.packages.map((p) => `| ${p.name} | \`npm i ${p.url}\` |`).join('\n')}
+
+            ---
+            *Automated comment from workflow*
+            `;
+
+            async function find_bot_comment(issue_number) {
+              if (!issue_number) return null;
+              try {
+                const comments = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue_number,
+                });
+                return comments.data.find((comment) =>
+                  comment.body.includes(bot_comment_identifier)
+                );
+              } catch (e) {
+                console.log('Error finding comment:', e.message);
+                return null;
+              }
+            }
+
+            async function create_or_update_comment(issue_number) {
+              if (!issue_number) {
+                console.log('No issue number provided. Cannot post comment.');
+                return;
+              }
+
+              console.log(`Attempting to post comment to issue/PR #${issue_number}`);
+
+              const existing_comment = await find_bot_comment(issue_number);
+              if (existing_comment) {
+                console.log(`Updating existing comment ${existing_comment.id}`);
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing_comment.id,
+                  body: body(issue_number),
+                });
+              } else {
+                console.log(`Creating new comment on #${issue_number}`);
+                await github.rest.issues.createComment({
+                  issue_number: issue_number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: body(issue_number),
+                });
+              }
+            }
+
+            // VULNERABLE: Trusting artifact content for issue number
+            if (output.event_name === 'pull_request') {
+              if (output.number) {
+                await create_or_update_comment(output.number);
+              }
+            } else {
+              console.log('Not a pull_request event, skipping comment');
+            }

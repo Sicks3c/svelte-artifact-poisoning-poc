@@ -1,0 +1,37 @@
+name: Build Artifact
+
+on: [push, pull_request]
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create build output
+        run: |
+          # Simulate a build that creates output.json
+          cat > output.json << 'EOF'
+          {
+            "event_name": "${{ github.event_name }}",
+            "number": ${{ github.event.pull_request.number || 'null' }},
+            "ref": "${{ github.ref }}",
+            "packages": [
+              {
+                "name": "test-package",
+                "url": "https://pkg.pr.new/test-package@${{ github.sha }}"
+              }
+            ]
+          }
+          EOF
+
+          echo "=== Build output ==="
+          cat output.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: output
+          path: ./output.json
